@@ -124,11 +124,11 @@ export default function App() {
 
     setFormStatus("submitting");
     try {
-      const response = await fetch(\`\${supabaseUrl}/rest/v1/enquiries\`, {
+      const response = await fetch(`${supabaseUrl}/rest/v1/enquiries`, {
         method: "POST",
         headers: {
           apikey: supabaseKey,
-          Authorization: \`Bearer \${supabaseKey}\`,
+          Authorization: `Bearer ${supabaseKey}`,
           "Content-Type": "application/json",
           Prefer: "return=minimal",
         },
