@@ -6,10 +6,40 @@ import { plansLabel } from '../data/data'
 import { Button } from './ui'
 
 export type Enquiry = { name: string; email: string; phone: string; interest: string; membership: string; start: string; method: string; message: string }
-/** Replace the body with e.g. `await supabase.from('enquiries').insert(data)`. Nothing is sent today. */
-export async function submitEnquiry(_data: Enquiry): Promise<{ ok: boolean }> {
-  await new Promise((r) => setTimeout(r, 900))
-  return { ok: true }
+/** Sends membership enquiries to the Supabase REST API. */
+export async function submitEnquiry(data: Enquiry): Promise<{ ok: boolean; error?: string }> {
+  const url = import.meta.env.VITE_SUPABASE_URL
+  const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+  if (!url || !key) return { ok: false, error: 'The enquiry service is not configured yet. Please call or email the gym.' }
+  try {
+    const response = await fetch(`${url}/rest/v1/enquiries`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({
+        name: data.name.trim(),
+        email: data.email.trim(),
+        phone: data.phone.trim(),
+        interest: data.interest,
+        membership: data.membership,
+        preferred_start_date: data.start || null,
+        preferred_contact_method: data.method,
+        message: data.message.trim(),
+      }),
+    })
+    if (!response.ok) {
+      console.error('Supabase enquiry insert failed:', response.status, await response.text())
+      return { ok: false, error: 'We could not send your enquiry right now. Please try again or contact the gym directly.' }
+    }
+    return { ok: true }
+  } catch (error) {
+    console.error('Enquiry submission failed:', error)
+    return { ok: false, error: 'Network error. Please check your connection and try again.' }
+  }
 }
 export const CONTACT = { phone: '+00 000 000 0000', email: 'hello@irondistrict.example' }
 const MEMBERSHIPS = ['General Enquiry', ...Object.values(plansLabel)]
@@ -21,7 +51,7 @@ export default function ContactForm() {
   const plan = params.get('plan')
   const [f, setF] = useState<Enquiry>({ name: '', email: '', phone: '', interest: plan ? 'Membership' : 'General Enquiry', membership: fromParam(plan), start: '', method: 'Email', message: '' })
   const [err, setErr] = useState<Partial<Record<keyof Enquiry, string>>>({})
-  const [busy, setBusy] = useState(false), [done, setDone] = useState(false)
+  const [busy, setBusy] = useState(false), [done, setDone] = useState(false), [submitError, setSubmitError] = useState('')
   useEffect(() => { if (plan) setF((s) => ({ ...s, membership: fromParam(plan), interest: 'Membership' })) }, [plan])
   const set = (k: keyof Enquiry) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value })
   async function onSubmit(e: FormEvent) {
@@ -31,11 +61,11 @@ export default function ContactForm() {
     if (!/^\S+@\S+\.\S+$/.test(f.email)) x.email = 'Enter a valid email address.'
     if (f.phone && f.phone.replace(/\D/g, '').length < 7) x.phone = 'Enter a phone number with at least 7 digits.'
     setErr(x); if (Object.keys(x).length) return
-    setBusy(true); const r = await submitEnquiry(f); setBusy(false); setDone(r.ok)
+    setBusy(true); setSubmitError(''); const r = await submitEnquiry(f); setBusy(false); setDone(r.ok); if (!r.ok) setSubmitError(r.error || 'Unable to send your enquiry.')
   }
   if (done) return (
     <div className="ok" role="status"><Check size={40} /><h2 className="h3">Your membership enquiry has been received.</h2>
-      <p className="muted">Selected: {f.membership}. This demo does not send email or store data yet; connect a backend to deliver enquiries to the gym.</p>
+      <p className="muted">Selected: {f.membership}. Your enquiry has been saved. The gym team can follow up using the contact details you provided.</p>
       <div className="row"><a className="btn" href={`tel:${CONTACT.phone.replace(/\s/g, '')}`}><span className="btn-t">CALL THE GYM</span><Phone size={18} /></a>
         <a className="btn ghost" href={`mailto:${CONTACT.email}`}><span className="btn-t">EMAIL THE GYM</span><Mail size={18} /></a></div></div>
   )
@@ -53,6 +83,7 @@ export default function ContactForm() {
       <fieldset><legend>Membership type</legend><div className="seg">
         {MEMBERSHIPS.map((m) => <label key={m} className={f.membership === m ? 'on' : ''}><input type="radio" name="m" checked={f.membership === m} onChange={() => setF({ ...f, membership: m })} />{m}</label>)}</div></fieldset>
       <label className="fld">Message<textarea rows={4} value={f.message} onChange={set('message')} /></label>
+      {submitError && <p role="alert" className="error">{submitError}</p>}
       <Button type="submit" disabled={busy}>{busy ? 'SENDING...' : 'SEND ENQUIRY'}</Button>
     </form>
   )
